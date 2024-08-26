@@ -441,11 +441,8 @@ impl Input {
             // TODO check the <input> element's type ?
             Some(target.value())
 
-        } else if let Some(target) = target.dyn_ref::<HtmlTextAreaElement>() {
-            Some(target.value())
-
-        } else {
-            None
+        } else { 
+            target.dyn_ref::<HtmlTextAreaElement>().map(|target| target.value()) 
         }
     }
 }

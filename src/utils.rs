@@ -68,14 +68,14 @@ impl<A> RefCounter<A> {
 
 pub(crate) struct MutableListener<A> {
     mutable: Mutable<A>,
-    listener: DiscardOnDrop<EventListener>,
+    _listener: DiscardOnDrop<EventListener>,
 }
 
 impl<A> MutableListener<A> {
     pub(crate) fn new(mutable: Mutable<A>, listener: EventListener) -> Self {
         Self {
             mutable,
-            listener: DiscardOnDrop::new(listener),
+            _listener: DiscardOnDrop::new(listener),
         }
     }
 

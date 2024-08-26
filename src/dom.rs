@@ -146,7 +146,7 @@ impl Discard for DomHandle {
 #[inline]
 #[track_caller]
 pub fn append_dom(parent: &Node, dom: Dom) -> DomHandle {
-    bindings::append_child(&parent, &dom.element);
+    bindings::append_child(parent, &dom.element);
     DomHandle::new(parent, dom)
 }
 
@@ -154,7 +154,7 @@ pub fn append_dom(parent: &Node, dom: Dom) -> DomHandle {
 #[inline]
 #[track_caller]
 pub fn replace_dom(parent: &Node, old_node: &Node, dom: Dom) -> DomHandle {
-    bindings::replace_child(&parent, &dom.element, old_node);
+    bindings::replace_child(parent, &dom.element, old_node);
     DomHandle::new(parent, dom)
 }
 
@@ -235,8 +235,9 @@ pub struct WindowSize {
 impl WindowSize {
     fn new() -> Self {
         WINDOW.with(|window| {
-            let width = window.inner_width().unwrap_throw().as_f64().unwrap_throw();
-            let height = window.inner_height().unwrap_throw().as_f64().unwrap_throw();
+            let document_element = window.document().unwrap().document_element().unwrap();
+            let width = document_element.client_width() as f64;
+            let height = document_element.client_height() as f64;
 
             Self { width, height }
         })
@@ -298,6 +299,81 @@ pub fn window_size() -> impl Signal<Item = WindowSize> {
     });
 
     WindowSizeSignal { signal }
+}
+
+/// This is returned by the [`window_offset`] function.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WindowOffset {
+    pub x: f64,
+    pub y: f64,
+}
+
+impl WindowOffset {
+    fn new() -> Self {
+        WINDOW.with(|window| {
+            let x = window.scroll_x().unwrap_throw();
+            let y = window.scroll_y().unwrap_throw();
+
+            Self { x, y }
+        })
+    }
+}
+
+
+thread_local! {
+    static WINDOW_OFFSET: RefCounter<MutableListener<WindowOffset>> = RefCounter::new();
+}
+
+
+#[derive(Debug)]
+#[must_use = "Signals do nothing unless polled"]
+struct WindowOffsetSignal {
+    signal: MutableSignal<WindowOffset>,
+}
+
+impl Signal for WindowOffsetSignal {
+    type Item = WindowOffset;
+
+    #[inline]
+    fn poll_change(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        Pin::new(&mut self.signal).poll_change(cx)
+    }
+}
+
+impl Drop for WindowOffsetSignal {
+    fn drop(&mut self) {
+        WINDOW_OFFSET.with(|size| {
+            size.decrement();
+        });
+    }
+}
+
+
+/// `Signal` which gives the current scrollX / scrollY of the window.
+///
+/// When the window is scroll, it will automatically update with the new offset.
+pub fn window_offset() -> impl Signal<Item = WindowOffset> {
+    let signal = WINDOW_OFFSET.with(|offset| {
+        let offset = offset.increment(|| {
+            let offset = Mutable::new(WindowOffset::new());
+
+            let listener = {
+                let offset = offset.clone();
+
+                WINDOW.with(move |window| {
+                    on(window, &EventOptions::default(), move |_: crate::events::Scroll| {
+                        offset.set_neq(WindowOffset::new());
+                    })
+                })
+            };
+
+            MutableListener::new(offset, listener)
+        });
+
+        offset.as_mutable().signal()
+    });
+
+    WindowOffsetSignal { signal }
 }
 
 
@@ -525,7 +601,7 @@ pub fn text_signal<A, B>(value: B) -> Dom
 
     Dom {
         element: element.into(),
-        callbacks: callbacks,
+        callbacks,
     }
 }
 
@@ -626,14 +702,14 @@ fn set_style<A, B>(style: &CssStyleDeclaration, name: &A, value: B, important: b
 
     // TODO track_caller
     fn try_set_style(style: &CssStyleDeclaration, names: &mut Vec<String>, values: &mut Vec<String>, name: &str, value: &str, important: bool) -> Option<()> {
-        assert!(value != "");
+        assert!(!value.is_empty());
 
         // TODO handle browser prefixes ?
         bindings::remove_style(style, name);
 
         bindings::set_style(style, name, value, important);
 
-        let is_changed = bindings::get_style(style, name) != "";
+        let is_changed = !bindings::get_style(style, name).is_empty();
 
         if is_changed {
             Some(())
@@ -650,15 +726,13 @@ fn set_style<A, B>(style: &CssStyleDeclaration, name: &A, value: B, important: b
 
         value.find_map(|value| {
             // TODO should this intern ?
-            try_set_style(style, &mut names, &mut values, &name, &value, important)
+            try_set_style(style, &mut names, &mut values, name, value, important)
         })
     });
 
-    if let None = okay {
-        if cfg!(debug_assertions) {
-            // TODO maybe make this configurable
-            panic!("style is incorrect:\n  names: {}\n  values: {}", names.join(", "), values.join(", "));
-        }
+    if okay.is_none() && cfg!(debug_assertions) {
+        // TODO maybe make this configurable
+        panic!("style is incorrect:\n  names: {}\n  values: {}", names.join(", "), values.join(", "));
     }
 }
 
@@ -728,7 +802,7 @@ fn set_property<A, B, C>(element: &A, name: &B, value: C) where A: AsRef<JsValue
 }
 
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct EventOptions {
     pub bubbles: bool,
     pub preventable: bool,
@@ -760,16 +834,6 @@ impl EventOptions {
         }
     }
 }
-
-impl Default for EventOptions {
-    fn default() -> Self {
-        Self {
-            bubbles: false,
-            preventable: false,
-        }
-    }
-}
-
 
 /// Scroll behavior for [`ScrollIntoView`].
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -865,7 +929,7 @@ impl ScrollIntoView {
         }
     }
 
-    fn into_js(&self) -> web_sys::ScrollIntoViewOptions {
+    fn into_js(self) -> web_sys::ScrollIntoViewOptions {
         let output = web_sys::ScrollIntoViewOptions::new();
         output.set_inline(self.align_x.into_js());
         output.set_block(self.align_y.into_js());
@@ -1095,7 +1159,7 @@ impl<A> DomBuilder<A> where A: AsRef<EventTarget> {
     pub fn event_with_options<T, F>(mut self, options: &EventOptions, listener: F) -> Self
         where T: StaticEvent,
               F: FnMut(T) + 'static {
-        Self::_event(&mut self.callbacks, &self.element.as_ref(), options, listener);
+        Self::_event(&mut self.callbacks, self.element.as_ref(), options, listener);
         self
     }
 
@@ -1207,7 +1271,7 @@ impl<A> DomBuilder<A> where A: AsRef<Element> {
         let element = self.element.as_ref();
 
         name.each(|name| {
-            bindings::set_attribute(element, intern(name), &value);
+            bindings::set_attribute(element, intern(name), value);
         });
 
         self
@@ -1227,7 +1291,7 @@ impl<A> DomBuilder<A> where A: AsRef<Element> {
         let namespace: &str = intern(namespace);
 
         name.each(|name| {
-            bindings::set_attribute_ns(element, &namespace, intern(name), &value);
+            bindings::set_attribute_ns(element, namespace, intern(name), value);
         });
 
         self
@@ -1280,7 +1344,7 @@ impl<A> DomBuilder<A> where A: AsRef<Element> {
                 Some(value) => {
                     value.with_str(|value| {
                         name.each(|name| {
-                            bindings::set_attribute(element, intern(name), &value);
+                            bindings::set_attribute(element, intern(name), value);
                         });
                     });
                 },
@@ -1335,7 +1399,7 @@ impl<A> DomBuilder<A> where A: AsRef<Element> {
                     value.with_str(|value| {
                         name.each(|name| {
                             // TODO should this intern the value ?
-                            bindings::set_attribute_ns(element, &namespace, intern(name), &value);
+                            bindings::set_attribute_ns(element, &namespace, intern(name), value);
                         });
                     });
                 },
@@ -1393,14 +1457,12 @@ impl<A> DomBuilder<A> where A: AsRef<Element> {
                     });
                 }
 
-            } else {
-                if is_set {
-                    is_set = false;
+            } else if is_set {
+                is_set = false;
 
-                    name.each(|name| {
-                        bindings::remove_class(&element, intern(name));
-                    });
-                }
+                name.each(|name| {
+                    bindings::remove_class(&element, intern(name));
+                });
             }
         }));
     }
@@ -2123,7 +2185,7 @@ mod tests {
             .style("foo".to_owned(), "bar".to_owned())
             .style_signal("foo".to_owned(), always("bar".to_owned()))
 
-            .style(&"foo".to_owned(), &"bar".to_owned())
+            .style("foo".to_owned(), "bar".to_owned())
             //.style(Box::new("foo".to_owned()), Box::new("bar".to_owned()))
             //.style_signal(Box::new("foo".to_owned()), always(Box::new("bar".to_owned())))
 
