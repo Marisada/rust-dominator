@@ -65,7 +65,7 @@ impl<A> RefCounter<A> {
     }
 }
 
-
+#[allow(dead_code)]
 pub(crate) struct MutableListener<A> {
     mutable: Mutable<A>,
     listener: DiscardOnDrop<EventListener>,
