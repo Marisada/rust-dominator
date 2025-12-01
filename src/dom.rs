@@ -2087,19 +2087,25 @@ mod tests {
     use futures_signals::signal::{always, SignalExt};
     use once_cell::sync::Lazy;
     use web_sys::HtmlElement;
+    use wasm_bindgen_test::*;
 
-    #[test]
+    // Run with..
+    // cargo install geckodriver
+    // cargo test --target wasm32-unknown-unknown
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
+    #[wasm_bindgen_test]
     fn apply() {
         let a: DomBuilder<HtmlElement> = DomBuilder::new_html("div");
 
         fn my_mixin<A: AsRef<HtmlElement>>(builder: DomBuilder<A>) -> DomBuilder<A> {
-            builder.style("foo", "bar")
+            builder.style("color", "red")
         }
 
         let _ = a.apply(my_mixin);
     }
 
-    #[test]
+    #[wasm_bindgen_test]
     fn children_mut() {
         let _a: DomBuilder<HtmlElement> = DomBuilder::new_html("div")
             .children(&mut [
@@ -2109,7 +2115,7 @@ mod tests {
             ]);
     }
 
-    #[test]
+    #[wasm_bindgen_test]
     fn children_value() {
         let v: Vec<u32> = vec![];
 
@@ -2119,7 +2125,7 @@ mod tests {
             }));
     }
 
-    #[test]
+    #[wasm_bindgen_test]
     fn text_signal_types() {
         let _ = text_signal(always("foo"));
         let _ = text_signal(always("foo".to_owned()));
@@ -2134,7 +2140,7 @@ mod tests {
         //text_signal(always(Cow::Owned::<String>("foo".to_owned())));
     }
 
-    #[test]
+    #[wasm_bindgen_test]
     fn property_signal_types() {
         let _a: DomBuilder<HtmlElement> = DomBuilder::new_html("div")
             .prop("foo", "hi")
@@ -2151,21 +2157,21 @@ mod tests {
             ;
     }
 
-    #[test]
+    #[wasm_bindgen_test]
     fn attribute_signal_types() {
         let _a: DomBuilder<HtmlElement> = DomBuilder::new_html("div")
-            .attr("foo", "hi")
-            .attr(["foo", "-webkit-foo", "-ms-foo"], "hi")
+            .attr("title", "hi")
+            .attr(["title"], "hi")
 
-            .attr_signal("foo", always("hi"))
-            .attr_signal("foo", always(Some("hi")))
+            .attr_signal("title", always("hi"))
+            .attr_signal("title", always(Some("hi")))
 
-            .attr_signal(["foo", "-webkit-foo", "-ms-foo"], always("hi"))
-            .attr_signal(["foo", "-webkit-foo", "-ms-foo"], always(Some("hi")))
+            .attr_signal(["title"], always("hi"))
+            .attr_signal(["title"], always(Some("hi")))
             ;
     }
 
-    #[test]
+    #[wasm_bindgen_test]
     fn class_signal_types() {
         let _a: DomBuilder<HtmlElement> = DomBuilder::new_html("div")
             .class("foo")
@@ -2176,48 +2182,48 @@ mod tests {
             ;
     }
 
-    #[test]
+    #[wasm_bindgen_test]
     fn style_signal_types() {
-        static FOO: Lazy<String> = Lazy::new(|| "foo".to_owned());
+        static FOO: Lazy<String> = Lazy::new(|| "red".to_owned());
 
         let _a: DomBuilder<HtmlElement> = DomBuilder::new_html("div")
-            .style_signal("foo", always("bar"))
-            .style_signal("foo", always("bar".to_owned()))
-            .style_signal("foo", always("bar".to_owned()).map(|x| RefFn::new(x, |x| x.as_str())))
+            .style_signal("color", always("red"))
+            .style_signal("color", always("red".to_owned()))
+            .style_signal("color", always("red".to_owned()).map(|x| RefFn::new(x, |x| x.as_str())))
 
-            .style("foo".to_owned(), "bar".to_owned())
-            .style_signal("foo".to_owned(), always("bar".to_owned()))
+            .style("color".to_owned(), "red".to_owned())
+            .style_signal("color".to_owned(), always("red".to_owned()))
 
-            .style("foo".to_owned(), "bar".to_owned())
-            //.style(Box::new("foo".to_owned()), Box::new("bar".to_owned()))
-            //.style_signal(Box::new("foo".to_owned()), always(Box::new("bar".to_owned())))
+            .style("color".to_owned(), "red".to_owned())
+            //.style(Box::new("foo".to_owned()), Box::new("red".to_owned()))
+            //.style_signal(Box::new("foo".to_owned()), always(Box::new("red".to_owned())))
 
-            .style_signal(&*FOO, always(&*FOO))
+            .style_signal(&*FOO, always("red".to_owned()))
 
-            //.style(vec!["-moz-foo", "-webkit-foo", "foo"].as_slice(), vec!["bar"].as_slice())
-            .style_signal(RefFn::new(vec!["-moz-foo", "-webkit-foo", "foo"], |x| x.as_slice()), always(RefFn::new(vec!["bar"], |x| x.as_slice())))
+            //.style(vec!["-moz-foo", "-webkit-foo", "foo"].as_slice(), vec!["red"].as_slice())
+            .style_signal(RefFn::new(vec!["color"], |x| x.as_slice()), always(RefFn::new(vec!["red"], |x| x.as_slice())))
 
-            .style_signal(["-moz-foo", "-webkit-foo", "foo"], always("bar"))
-            .style_signal(["-moz-foo", "-webkit-foo", "foo"], always("bar".to_owned()))
-            .style_signal(["-moz-foo", "-webkit-foo", "foo"], always("bar".to_owned()).map(|x| RefFn::new(x, |x| x.as_str())))
+            .style_signal(["color"], always("red"))
+            .style_signal(["color"], always("red".to_owned()))
+            .style_signal(["color"], always("red".to_owned()).map(|x| RefFn::new(x, |x| x.as_str())))
 
-            .style_signal(["-moz-foo", "-webkit-foo", "foo"], always(["bar", "qux"]))
-            .style_signal(["-moz-foo", "-webkit-foo", "foo"], always(["bar".to_owned(), "qux".to_owned()]))
+            .style_signal(["color"], always(["red"]))
+            .style_signal(["color"], always(["red".to_owned()]))
 
-            //.style_signal(["-moz-foo", "-webkit-foo", "foo"], always(AsSlice::new(["foo", "bar"])))
-            //.style_signal(["-moz-foo", "-webkit-foo", "foo"], always(("bar".to_owned(), "qux".to_owned())).map(|x| RefFn::new(x, |x| AsSlice::new([x.0.as_str(), x.1.as_str()]))))
+            //.style_signal(["color"], always(AsSlice::new(["color", "red"])))
+            //.style_signal(["color"], always(("red".to_owned())).map(|x| RefFn::new(x, |x| AsSlice::new([x.0.as_str(), x.1.as_str()]))))
 
-            .style_signal("foo", always(Some("bar")))
-            .style_signal("foo", always(Some("bar".to_owned())))
-            .style_signal("foo", always("bar".to_owned()).map(|x| Some(RefFn::new(x, |x| x.as_str()))))
+            .style_signal("color", always(Some("red")))
+            .style_signal("color", always(Some("red".to_owned())))
+            .style_signal("color", always("red".to_owned()).map(|x| Some(RefFn::new(x, |x| x.as_str()))))
 
-            .style_signal(["-moz-foo", "-webkit-foo", "foo"], always(Some("bar")))
-            .style_signal(["-moz-foo", "-webkit-foo", "foo"], always(Some("bar".to_owned())))
-            .style_signal(["-moz-foo", "-webkit-foo", "foo"], always("bar".to_owned()).map(|x| Some(RefFn::new(x, |x| x.as_str()))))
+            .style_signal(["color"], always(Some("red")))
+            .style_signal(["color"], always(Some("red".to_owned())))
+            .style_signal(["color"], always("red".to_owned()).map(|x| Some(RefFn::new(x, |x| x.as_str()))))
             ;
     }
 
-    #[test]
+    #[wasm_bindgen_test]
     fn shadow_root() {
         let _a = html!("div", {
             .shadow_root!(ShadowRootMode::Closed => {
@@ -2228,7 +2234,7 @@ mod tests {
         });
     }
 
-    #[test]
+    #[wasm_bindgen_test]
     #[allow(unexpected_cfgs)]
     fn with_cfg() {
         let _a = html!("div", {
